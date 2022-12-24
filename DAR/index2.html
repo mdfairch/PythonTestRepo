@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+circle {
+  stroke-width: 1.5px;
+}
+
+line {
+  stroke: #999;
+}
+
+#tooltip {
+    font-size: 10pt;
+    font-weight: 900;
+
+    fill: #000000;
+    stroke: #ffffff;
+    stroke-width: 0.25px;
+}
+
+
+</style>
+<body>
+<script src="d3.v4.min.js"></script>
+<script>
+
+// Generates a tooltip for a SVG circle element based on its ID
+function addTooltip(circle) {
+    var x = parseFloat(circle.attr("cx"));
+    var y = parseFloat(circle.attr("cy"));
+    var r = parseFloat(circle.attr("r"));
+    var text = circle.attr("id");
+    var tooltip = d3.select("#plot")
+        .append("text")
+        .text(text)
+        .attr("x", x)
+        .attr("y", y)
+        .attr("dy", -r * 2)
+        .attr("id", "tooltip");
+    var offset = tooltip.node().getBBox().width / 2;
+    if ((x - offset) < 0) {
+        tooltip.attr("text-anchor", "start");
+        tooltip.attr("dx", -r);
+    }
+    else if ((x + offset) > (width - margin)) {
+        tooltip.attr("text-anchor", "end");
+        tooltip.attr("dx", r);
+    }
+    else {
+        tooltip.attr("text-anchor", "middle");
+        tooltip.attr("dx", 0);
+    }
+}
+
+function gravity(alpha, e) {
+  return function(d) {
+    d.y += Math.pow((d.cy - d.y) * alpha, 1.0);
+    d.x += Math.pow((d.cx - d.x) * alpha, 1.0);
+  };
+}
+
+var width = 1800,
+    height = 1000,
+    radius = 5;
+
+var fill = d3.scaleOrdinal(d3.schemeCategory20);
+
+var simulation = d3.forceSimulation()
+    .velocityDecay(0.05)
+    .force("x", d3.forceX(width / 2).strength(.05))
+    .force("y", d3.forceY(height / 2).strength(.05))
+    .force("charge", d3.forceManyBody().strength(-50).distanceMax(250))
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("gravity",gravity(0.15))
+    .force("link", d3.forceLink().distance(50).strength(1));
+
+var svg = d3.select("body").append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+d3.json("pcap_export.json", function(error, graph) {
+  if (error) throw error;
+
+  var link = svg.selectAll("line")
+      .data(graph.links)
+    .enter().append("line");
+
+  var node = svg.selectAll("circle")
+      .data(graph.nodes)
+    .enter().append("circle")
+      .attr("class", "node")
+      .attr("r", radius - .75)
+      .style("fill", function(d) { return fill(d.group); })
+      .style("stroke", function(d) { return d3.rgb(fill(d.group)).darker(); })
+        .attr("id", function(d, i) { return d.name; })
+        .attr("cx", function(d, i) { return d.x; })
+        .attr("cy", function(d, i) { return d.y; })
+        .on("mouseover", function(d, i) { addTooltip(d3.select(this)); })
+		.on("mouseout",  function(d, i) { d3.select("#tooltip").remove(); })
+      .call(d3.drag()
+          .on("start", dragstarted)
+          .on("drag", dragged)
+          .on("end", dragended));
+
+  simulation
+      .nodes(graph.nodes)
+      .on("tick", tick);
+
+  simulation.force('link')
+      .links(graph.links);
+
+  function tick() {
+    node.attr("cx", function(d) { return d.x = Math.max(radius, Math.min(width - radius, d.x)); })
+        .attr("cy", function(d) { return d.y = Math.max(radius, Math.min(height - radius, d.y)); });
+
+    link.attr("x1", function(d) { return d.source.x; })
+        .attr("y1", function(d) { return d.source.y; })
+        .attr("x2", function(d) { return d.target.x; })
+        .attr("y2", function(d) { return d.target.y; });
+  }
+});
+
+function dragstarted(d) {
+  if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x;
+  d.fy = d.y;
+}
+
+function dragged(d) {
+  d.fx = d3.event.x;
+  d.fy = d3.event.y;
+}
+
+function dragended(d) {
+  if (!d3.event.active) simulation.alphaTarget(0);
+  d.fx = null;
+  d.fy = null;
+}
+
+</script>
